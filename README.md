@@ -1,90 +1,57 @@
-# GoFuzz
+# JSluice URL Processor
 
-GoFuzz is a powerful URL fuzzing tool written in Go that leverages jsluice for advanced parsing. It generates a variety of fuzzed URLs based on the structure and parameters of input URLs, making it an invaluable asset for web application security testing and API endpoint discovery.
-
-## Features
-
-- Utilizes jsluice for advanced URL parsing and parameter extraction
-- Generates fuzzed URLs for various scenarios:
-  - Query parameters
-  - Body parameters (for POST and PUT requests)
-  - Path parameters
-- Concurrent processing for improved performance
-- Flexible input/output options (file or stdout)
-- Easy integration with other security tools
+This tool processes URLs using jsluice and formats them for use in web browsers. It reads URLs from stdin, runs them through jsluice, and outputs processed URLs with merged query parameters.
 
 ## Prerequisites
 
-- Go 1.21 or higher
-- jsluice (must be installed and available in your PATH)
+- Python 3.6+
+- jsluice
+- curl
 
 ## Installation
 
-1. Clone the repository:
-   ```
-   go install github.com/nullenc0de/GoFuzz/cmd/gofuzz@latest
-   OR
-   git clone https://github.com/nullenc0de/GoFuzz.git
-   cd GoFuzz
-   ```
+1. Clone this repository or download the `process_jsluice.py` script.
+2. Make the script executable:
 
-2. Build the project:
    ```
-   go build -o gofuzz cmd/gofuzz/main.go
-   ```
-
-3. (Optional) Move the binary to a directory in your PATH:
-   ```
-   sudo mv gofuzz /usr/local/bin/
+   chmod +x process_jsluice.py
    ```
 
 ## Usage
 
-Basic usage:
+### Basic Usage
+
+Process a single URL:
 
 ```
-gofuzz -input urls.txt -output fuzzed_urls.txt -concurrent 20
+echo "https://example.com" | ./process_jsluice.py
 ```
 
-Options:
-- `-input`: Input file containing URLs (required)
-- `-output`: Output file for fuzzed URLs (optional, defaults to stdout)
-- `-concurrent`: Number of concurrent workers (optional, defaults to 10)
+Process multiple URLs from a file:
 
-## Example
-
-Input file (`urls.txt`):
 ```
-https://api.example.com/users?id=123
-https://api.example.com/search
-https://api.example.com/products/456
+cat urls.txt | ./process_jsluice.py
 ```
 
-Running GoFuzz:
-```
-gofuzz -input urls.txt -output fuzzed_urls.txt
-```
+### Integration with other tools
 
-Output file (`fuzzed_urls.txt`):
+Use with `katana` to crawl a website and process all discovered URLs:
+
 ```
-https://api.example.com/users
-https://api.example.com/users?id=FUZZ
-https://api.example.com/FUZZ/users
-https://api.example.com/search
-https://api.example.com/FUZZ
-https://api.example.com/products/456
-https://api.example.com/products/FUZZ
-https://api.example.com/FUZZ/456
+katana -u "https://example.com" | ./process_jsluice.py
 ```
 
-## Contributing
+## Notes
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+- The script preserves existing query parameter values in the URL.
+- It adds new parameters from the jsluice output if they're not already in the URL.
+- Encoded characters in URLs are preserved.
 
-## License
+## Troubleshooting
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+If you encounter any issues, make sure:
+- jsluice is installed and accessible in your PATH.
+- You have necessary permissions to execute the script and run curl commands.
+- Your input URLs are properly formatted.
 
-## Disclaimer
-
-This tool is for educational and testing purposes only. Always ensure you have permission before testing any systems you do not own or have explicit permission to test.
+For any bugs or feature requests, please open an issue in the repository.
