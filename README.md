@@ -22,7 +22,9 @@ GoFuzz is a powerful URL fuzzing tool written in Go that leverages jsluice for a
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/GoFuzz.git
+   go install github.com/nullenc0de/GoFuzz/cmd/gofuzz@latest
+   OR
+   git clone https://github.com/nullenc0de/GoFuzz.git
    cd GoFuzz
    ```
 
