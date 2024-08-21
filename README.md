@@ -5,7 +5,7 @@ This tool processes URLs using jsluice and formats them for use in web browsers.
 ## Prerequisites
 
 - Python 3.6+
-- jsluice
+- jsluice - go install github.com/BishopFox/jsluice/cmd/jsluice@latest
 - curl
 
 ## Installation
