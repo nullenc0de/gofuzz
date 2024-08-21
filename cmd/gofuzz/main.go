@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nullenc0de/GoFuzz/internal/fuzzer"
-	"github.com/nullenc0de/GoFuzz/internal/jsluice"
+	"github.com/nullenc0de/gofuzz/internal/fuzzer"
+	"github.com/nullenc0de/gofuzz/internal/jsluice"
 )
 
 func main() {
