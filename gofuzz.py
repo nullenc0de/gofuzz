@@ -2,13 +2,18 @@ import json
 import sys
 import urllib.parse
 import subprocess
+import re
 
 def run_jsluice(url):
     cmd = f"jsluice urls -R '{url}' <(curl -sk '{url}')"
     result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
     return result.stdout.splitlines()
 
-def process_jsluice_output(jsluice_output):
+def is_js_file(url):
+    return url.lower().endswith('.js')
+
+def process_jsluice_output(jsluice_output, processed_urls, non_js_urls):
+    js_urls = set()
     for line in jsluice_output:
         try:
             data = json.loads(line)
@@ -43,12 +48,35 @@ def process_jsluice_output(jsluice_output):
                     parsed_url.fragment
                 ))
                 
-                print(new_url)
+                if is_js_file(new_url) and new_url not in processed_urls:
+                    js_urls.add(new_url)
+                else:
+                    non_js_urls.add(new_url)
         except json.JSONDecodeError:
             print(f"Error decoding JSON: {line}", file=sys.stderr)
+    
+    return js_urls
+
+def recursive_process(initial_url):
+    processed_urls = set()
+    non_js_urls = set()
+    urls_to_process = {initial_url}
+
+    while urls_to_process:
+        current_url = urls_to_process.pop()
+        processed_urls.add(current_url)
+        
+        jsluice_output = run_jsluice(current_url)
+        new_js_urls = process_jsluice_output(jsluice_output, processed_urls, non_js_urls)
+        
+        urls_to_process.update(new_js_urls - processed_urls)
+
+    return non_js_urls
 
 if __name__ == "__main__":
-    for url in sys.stdin:
-        url = url.strip()
-        jsluice_output = run_jsluice(url)
-        process_jsluice_output(jsluice_output)
+    for initial_url in sys.stdin:
+        initial_url = initial_url.strip()
+        if initial_url:
+            result_urls = recursive_process(initial_url)
+            for url in sorted(result_urls):
+                print(url)
