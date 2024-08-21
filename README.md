@@ -38,7 +38,7 @@ cat urls.txt | ./process_jsluice.py
 Use with `katana` to crawl a website and process all discovered URLs:
 
 ```
-katana -u "https://example.com" | ./process_jsluice.py
+katana -u "https://example.com/test.js" | ./process_jsluice.py
 ```
 
 ## Notes
