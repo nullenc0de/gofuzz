@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nullenc0de/GoFuzz/internal/jsluice"
+	"github.com/nullenc0de/gofuzz/internal/jsluice"
 )
 
 func GenerateFuzzedURLs(inputs []jsluice.JSluiceOutput, concurrent int) ([]string, error) {
