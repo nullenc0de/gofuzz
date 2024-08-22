@@ -2,8 +2,8 @@ import json
 import sys
 import urllib.parse
 import subprocess
-import re
 import argparse
+from collections import OrderedDict
 
 def run_jsluice(url, mode):
     cmd = f"jsluice {mode} -R '{url}' <(curl -sk '{url}')"
@@ -13,7 +13,7 @@ def run_jsluice(url, mode):
 def is_js_file(url):
     return url.lower().endswith('.js')
 
-def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets, hunt_mode):
+def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets, hunt_mode, current_url):
     js_urls = set()
     for line in jsluice_output:
         try:
@@ -41,7 +41,8 @@ def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets,
                     else:
                         non_js_urls.add(new_url)
             elif 'kind' in data and (hunt_mode == 'secrets' or hunt_mode == 'both'):
-                # This is a secret
+                # Add the original JS file information
+                data['original_file'] = current_url
                 secrets.append(data)
         except json.JSONDecodeError:
             print(f"Error decoding JSON: {line}", file=sys.stderr)
@@ -60,14 +61,18 @@ def recursive_process(initial_url, hunt_mode):
         
         if hunt_mode in ['endpoints', 'both']:
             urls_output = run_jsluice(current_url, 'urls')
-            new_js_urls = process_jsluice_output(urls_output, processed_urls, non_js_urls, secrets, hunt_mode)
+            new_js_urls = process_jsluice_output(urls_output, processed_urls, non_js_urls, secrets, hunt_mode, current_url)
             urls_to_process.update(new_js_urls - processed_urls)
         
         if hunt_mode in ['secrets', 'both']:
             secrets_output = run_jsluice(current_url, 'secrets')
-            process_jsluice_output(secrets_output, processed_urls, non_js_urls, secrets, hunt_mode)
+            process_jsluice_output(secrets_output, processed_urls, non_js_urls, secrets, hunt_mode, current_url)
 
     return non_js_urls, secrets
+
+def severity_to_int(severity):
+    severity_map = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1, 'info': 0}
+    return severity_map.get(severity.lower(), -1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="JSluice URL and Secrets Processor")
@@ -90,5 +95,9 @@ if __name__ == "__main__":
             print(url)
 
     if args.mode in ['secrets', 'both']:
-        for secret in all_secrets:
+        # Sort secrets by severity (highest to lowest) and remove duplicates
+        sorted_secrets = sorted(all_secrets, key=lambda x: (-severity_to_int(x['severity']), json.dumps(x)))
+        unique_secrets = list(OrderedDict((json.dumps(secret), secret) for secret in sorted_secrets).values())
+
+        for secret in unique_secrets:
             print(json.dumps(secret))
