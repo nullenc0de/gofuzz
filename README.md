@@ -9,6 +9,7 @@ This tool recursively processes JavaScript files to extract URLs and secrets usi
 - Detects secrets (API keys, tokens, etc.) in JavaScript files
 - Resolves relative URLs to absolute URLs
 - Outputs unique URLs and secrets in an organized format
+- Allows specifying whether to hunt for endpoints, secrets, or both
 
 ## Prerequisites
 
@@ -20,10 +21,10 @@ This tool recursively processes JavaScript files to extract URLs and secrets usi
 
 1. Ensure you have Python 3.6+ installed on your system.
 2. Install the jsluice command-line tool. (Refer to the jsluice documentation for installation instructions)
-3. Clone this repository or download the `gofuzz.py` script.
+3. Clone this repository or download the `process_jsluice_recursive.py` script.
 4. Make the script executable:
 
-   ```bash
+   ```
    chmod +x gofuzz.py
    ```
 
@@ -33,22 +34,43 @@ You can use the script in two ways:
 
 1. Process a single URL:
 
-   ```bash
-   echo "https://example.com/script.js" | ./gofuzz.py
+   ```
+   echo "https://example.com/script.js" | ./gofuzz.py [options]
    ```
 
 2. Process multiple URLs from a file:
 
-   ```bash
-   cat js_urls.txt | ./gofuzz.py
    ```
+   cat js_urls.txt | ./gofuzz.py [options]
+   ```
+
+### Options
+
+- `-m {endpoints,secrets,both}`, `--mode {endpoints,secrets,both}`: Specify what to hunt for: endpoints, secrets, or both (default: both)
+
+Examples:
+
+- To hunt for endpoints only:
+  ```
+  echo "https://example.com/script.js" | ./gofuzz.py -m endpoints
+  ```
+
+- To hunt for secrets only:
+  ```
+  echo "https://example.com/script.js" | ./gofuzz.py -m secrets
+  ```
+
+- To hunt for both (default behavior):
+  ```
+  echo "https://example.com/script.js" | ./gofuzz.py -m both
+  ```
 
 ## Output
 
-The script outputs two main sections:
+The script outputs one or two main sections, depending on the chosen mode:
 
-1. **URLs**: A sorted list of unique URLs found in the processed JavaScript files.
-2. **Secrets**: Any secrets (like API keys or tokens) discovered in the JavaScript files.
+1. **URLs**: A sorted list of unique URLs found in the processed JavaScript files (if mode is 'endpoints' or 'both').
+2. **Secrets**: Any secrets (like API keys or tokens) discovered in the JavaScript files (if mode is 'secrets' or 'both').
 
 Example output:
 
