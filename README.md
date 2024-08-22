@@ -20,11 +20,11 @@ This tool recursively processes JavaScript files to extract URLs and secrets usi
 
 1. Ensure you have Python 3.6+ installed on your system.
 2. Install the jsluice command-line tool. (Refer to the jsluice documentation for installation instructions)
-3. Clone this repository or download the `process_jsluice_recursive.py` script.
+3. Clone this repository or download the `gofuzz.py` script.
 4. Make the script executable:
 
    ```bash
-   chmod +x process_jsluice_recursive.py
+   chmod +x gofuzz.py
    ```
 
 ## Usage
@@ -34,13 +34,13 @@ You can use the script in two ways:
 1. Process a single URL:
 
    ```bash
-   echo "https://example.com/script.js" | ./process_jsluice_recursive.py
+   echo "https://example.com/script.js" | ./gofuzz.py
    ```
 
 2. Process multiple URLs from a file:
 
    ```bash
-   cat js_urls.txt | ./process_jsluice_recursive.py
+   cat js_urls.txt | ./gofuzz.py
    ```
 
 ## Output
@@ -63,13 +63,6 @@ Secrets:
 {"kind": "AWSAccessKey", "data": {"key": "AKIAIOSFODNN7EXAMPLE", "secret": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}, "filename": "https://example.com/config.js", "severity": "high", "context": {"awsRegion": "us-west-2", "bucketName": "example-uploads"}}
 ...
 ```
-
-## Customization
-
-You can modify the script to adjust its behavior:
-
-- Change the `is_js_file()` function to include or exclude certain file types.
-- Modify the `process_jsluice_output()` function to handle additional types of data or to change how URLs and secrets are processed.
 
 ## Notes
 
