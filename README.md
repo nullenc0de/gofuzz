@@ -1,6 +1,6 @@
-# JSluice URL and Secrets Processor
+# gofuzz.py
 
-This tool recursively processes JavaScript files to extract URLs and secrets using the jsluice command-line utility. It starts with an initial URL, processes all JavaScript files it encounters, and outputs a comprehensive list of unique URLs and any secrets found.
+gofuzz.py is a powerful tool that recursively processes JavaScript files to extract URLs and secrets using the jsluice command-line utility. It starts with an initial URL, processes all JavaScript files it encounters, and outputs a comprehensive list of unique URLs and any secrets found, sorted by severity.
 
 ## Features
 
@@ -8,8 +8,11 @@ This tool recursively processes JavaScript files to extract URLs and secrets usi
 - Extracts URLs from various JavaScript contexts
 - Detects secrets (API keys, tokens, etc.) in JavaScript files
 - Resolves relative URLs to absolute URLs
-- Outputs unique URLs and secrets in an organized format
+- Outputs unique URLs and secrets without headers
 - Allows specifying whether to hunt for endpoints, secrets, or both
+- Sorts secrets by severity (highest to lowest)
+- Removes duplicate secrets
+- Includes information about the original JS file where each secret was found
 
 ## Prerequisites
 
@@ -21,7 +24,7 @@ This tool recursively processes JavaScript files to extract URLs and secrets usi
 
 1. Ensure you have Python 3.6+ installed on your system.
 2. Install the jsluice command-line tool. (Refer to the jsluice documentation for installation instructions)
-3. Clone this repository or download the `process_jsluice_recursive.py` script.
+3. Download the `gofuzz.py` script.
 4. Make the script executable:
 
    ```
@@ -67,24 +70,27 @@ Examples:
 
 ## Output
 
-The script outputs one or two main sections, depending on the chosen mode:
+The script outputs directly to stdout without headers:
 
-1. **URLs**: A sorted list of unique URLs found in the processed JavaScript files (if mode is 'endpoints' or 'both').
-2. **Secrets**: Any secrets (like API keys or tokens) discovered in the JavaScript files (if mode is 'secrets' or 'both').
+1. When hunting for endpoints (or both), it outputs a sorted list of unique URLs, one per line.
+2. When hunting for secrets (or both), it outputs JSON objects representing the secrets, one per line. Secrets are sorted by severity (highest to lowest) and duplicates are removed.
 
-Example output:
+Example output for secrets:
 
 ```
-URLs:
-https://api.example.com/v1/users
-https://cdn.example.com/assets/main.css
-https://example.com/about
-...
-
-Secrets:
-{"kind": "AWSAccessKey", "data": {"key": "AKIAIOSFODNN7EXAMPLE", "secret": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}, "filename": "https://example.com/config.js", "severity": "high", "context": {"awsRegion": "us-west-2", "bucketName": "example-uploads"}}
-...
+{"kind": "AWSAccessKey", "data": {"key": "AKIAIOSFODNN7EXAMPLE", "secret": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}, "filename": "https://example.com/config.js", "severity": "high", "context": {"awsRegion": "us-west-2", "bucketName": "example-uploads"}, "original_file": "https://example.com/main.js"}
+{"kind": "APIKey", "data": {"name": "GOOGLE_MAPS_API_KEY", "value": "AIzaSyC3xbj4UeWLQ2I5lxZpJFkfLwkbhcheQ4E"}, "filename": "https://example.com/main.js", "severity": "medium", "context": {"apiKey": "AIzaSyC3xbj4UeWLQ2I5lxZpJFkfLwkbhcheQ4E"}, "original_file": "https://example.com/main.js"}
 ```
+
+This format makes it easy to pipe the output into other tools for further processing.
+
+## Customization
+
+You can modify the script to adjust its behavior:
+
+- Change the `is_js_file()` function to include or exclude certain file types.
+- Modify the `process_jsluice_output()` function to handle additional types of data or to change how URLs and secrets are processed.
+- Adjust the `severity_to_int()` function to change the ordering of severity levels.
 
 ## Notes
 
@@ -103,10 +109,6 @@ If you encounter any issues:
 ## Contributing
 
 Contributions to improve the script are welcome. Please submit a pull request or open an issue to discuss proposed changes.
-
-## License
-
-[Specify the license under which you're releasing this script]
 
 ## Disclaimer
 
