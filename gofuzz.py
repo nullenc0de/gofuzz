@@ -86,11 +86,9 @@ if __name__ == "__main__":
             all_secrets.extend(result_secrets)
 
     if args.mode in ['endpoints', 'both']:
-        print("URLs:")
         for url in sorted(all_urls):
             print(url)
 
     if args.mode in ['secrets', 'both']:
-        print("\nSecrets:")
         for secret in all_secrets:
             print(json.dumps(secret))
