@@ -3,6 +3,7 @@ import sys
 import urllib.parse
 import subprocess
 import re
+import argparse
 
 def run_jsluice(url, mode):
     cmd = f"jsluice {mode} -R '{url}' <(curl -sk '{url}')"
@@ -12,12 +13,12 @@ def run_jsluice(url, mode):
 def is_js_file(url):
     return url.lower().endswith('.js')
 
-def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets):
+def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets, hunt_mode):
     js_urls = set()
     for line in jsluice_output:
         try:
             data = json.loads(line)
-            if 'url' in data:
+            if 'url' in data and (hunt_mode == 'endpoints' or hunt_mode == 'both'):
                 url = data['url']
                 
                 # Parse the URL
@@ -39,7 +40,7 @@ def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets)
                         js_urls.add(new_url)
                     else:
                         non_js_urls.add(new_url)
-            elif 'kind' in data:
+            elif 'kind' in data and (hunt_mode == 'secrets' or hunt_mode == 'both'):
                 # This is a secret
                 secrets.append(data)
         except json.JSONDecodeError:
@@ -47,7 +48,7 @@ def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets)
     
     return js_urls
 
-def recursive_process(initial_url):
+def recursive_process(initial_url, hunt_mode):
     processed_urls = set()
     non_js_urls = set()
     secrets = []
@@ -57,31 +58,39 @@ def recursive_process(initial_url):
         current_url = urls_to_process.pop()
         processed_urls.add(current_url)
         
-        urls_output = run_jsluice(current_url, 'urls')
-        secrets_output = run_jsluice(current_url, 'secrets')
+        if hunt_mode in ['endpoints', 'both']:
+            urls_output = run_jsluice(current_url, 'urls')
+            new_js_urls = process_jsluice_output(urls_output, processed_urls, non_js_urls, secrets, hunt_mode)
+            urls_to_process.update(new_js_urls - processed_urls)
         
-        new_js_urls = process_jsluice_output(urls_output, processed_urls, non_js_urls, secrets)
-        process_jsluice_output(secrets_output, processed_urls, non_js_urls, secrets)
-        
-        urls_to_process.update(new_js_urls - processed_urls)
+        if hunt_mode in ['secrets', 'both']:
+            secrets_output = run_jsluice(current_url, 'secrets')
+            process_jsluice_output(secrets_output, processed_urls, non_js_urls, secrets, hunt_mode)
 
     return non_js_urls, secrets
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="JSluice URL and Secrets Processor")
+    parser.add_argument('-m', '--mode', choices=['endpoints', 'secrets', 'both'], default='both',
+                        help="Specify what to hunt for: endpoints, secrets, or both (default: both)")
+    args = parser.parse_args()
+
     all_urls = set()
     all_secrets = []
 
     for initial_url in sys.stdin:
         initial_url = initial_url.strip()
         if initial_url:
-            result_urls, result_secrets = recursive_process(initial_url)
+            result_urls, result_secrets = recursive_process(initial_url, args.mode)
             all_urls.update(result_urls)
             all_secrets.extend(result_secrets)
 
-    print("URLs:")
-    for url in sorted(all_urls):
-        print(url)
+    if args.mode in ['endpoints', 'both']:
+        print("URLs:")
+        for url in sorted(all_urls):
+            print(url)
 
-    print("\nSecrets:")
-    for secret in all_secrets:
-        print(json.dumps(secret))
+    if args.mode in ['secrets', 'both']:
+        print("\nSecrets:")
+        for secret in all_secrets:
+            print(json.dumps(secret))
