@@ -1,32 +1,65 @@
 import json
 import sys
 import urllib.parse
-import subprocess
 import argparse
 from collections import OrderedDict
+import asyncio
+import aiohttp
+import tempfile
+import os
 
-def run_jsluice(url, mode):
-    cmd = f"jsluice {mode} -R '{url}' <(curl -sk '{url}')"
-    result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
-    return result.stdout.splitlines()
+async def run_jsluice(url, mode, session, verbose):
+    try:
+        async with session.get(url, timeout=30) as response:
+            content = await response.text()
+            if verbose:
+                print(f"Fetched: {url}")
+
+            with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
+                temp_file.write(content)
+                temp_file_path = temp_file.name
+
+            cmd = f"jsluice {mode} -R '{url}' {temp_file_path}"
+            if verbose:
+                print(f"Running command: {cmd}")
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+
+            os.unlink(temp_file_path)  # Remove the temporary file
+
+            if stderr and verbose:
+                print(f"Error processing {url}: {stderr.decode()}", file=sys.stderr)
+            return stdout.decode().splitlines()
+    except Exception as e:
+        if verbose:
+            print(f"Error fetching {url}: {str(e)}", file=sys.stderr)
+        return []
 
 def is_js_file(url):
-    return url.lower().endswith('.js')
+    return '.js' in url.lower()
 
-def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets, hunt_mode, current_url):
+def normalize_url(url, base_url):
+    if url.startswith('//'):
+        return 'https:' + url
+    elif not url.startswith(('http://', 'https://')):
+        return urllib.parse.urljoin(base_url, url)
+    return url
+
+async def process_jsluice_output(jsluice_output, current_url, verbose):
     js_urls = set()
+    non_js_urls = set()
+    secrets = []
     for line in jsluice_output:
         try:
             data = json.loads(line)
-            if 'url' in data and (hunt_mode == 'endpoints' or hunt_mode == 'both'):
-                url = data['url']
-                
-                # Parse the URL
+            if 'url' in data:
+                url = normalize_url(data['url'], current_url)
                 parsed_url = urllib.parse.urlparse(url)
-                
-                # Check if the URL is valid and has a scheme
                 if parsed_url.scheme and parsed_url.netloc:
-                    # Construct the new URL
                     new_url = urllib.parse.urlunparse((
                         parsed_url.scheme,
                         parsed_url.netloc,
@@ -35,69 +68,88 @@ def process_jsluice_output(jsluice_output, processed_urls, non_js_urls, secrets,
                         parsed_url.query,
                         parsed_url.fragment
                     ))
-                    
-                    if is_js_file(new_url) and new_url not in processed_urls:
+                    if is_js_file(new_url):
                         js_urls.add(new_url)
                     else:
                         non_js_urls.add(new_url)
-            elif 'kind' in data and (hunt_mode == 'secrets' or hunt_mode == 'both'):
-                # Add the original JS file information
+            elif 'kind' in data:
                 data['original_file'] = current_url
                 secrets.append(data)
         except json.JSONDecodeError:
-            print(f"Error decoding JSON: {line}", file=sys.stderr)
-    
-    return js_urls
+            if verbose:
+                print(f"Error decoding JSON: {line}", file=sys.stderr)
 
-def recursive_process(initial_url, hunt_mode):
-    processed_urls = set()
-    non_js_urls = set()
-    secrets = []
-    urls_to_process = {initial_url}
+    if verbose:
+        print(f"Processed {current_url}:")
+        print(f"  Found {len(js_urls)} JavaScript URLs")
+        print(f"  Found {len(non_js_urls)} non-JavaScript URLs")
+        print(f"  Found {len(secrets)} secrets")
 
-    while urls_to_process:
-        current_url = urls_to_process.pop()
-        processed_urls.add(current_url)
-        
-        if hunt_mode in ['endpoints', 'both']:
-            urls_output = run_jsluice(current_url, 'urls')
-            new_js_urls = process_jsluice_output(urls_output, processed_urls, non_js_urls, secrets, hunt_mode, current_url)
-            urls_to_process.update(new_js_urls - processed_urls)
-        
-        if hunt_mode in ['secrets', 'both']:
-            secrets_output = run_jsluice(current_url, 'secrets')
-            process_jsluice_output(secrets_output, processed_urls, non_js_urls, secrets, hunt_mode, current_url)
+    return js_urls, non_js_urls, secrets
 
-    return non_js_urls, secrets
+async def recursive_process(initial_url, session, processed_urls, verbose):
+    if initial_url in processed_urls:
+        return set(), set(), []
+    processed_urls.add(initial_url)
+
+    urls_output = await run_jsluice(initial_url, 'urls', session, verbose)
+    secrets_output = await run_jsluice(initial_url, 'secrets', session, verbose)
+
+    js_urls, non_js_urls, secrets = await process_jsluice_output(urls_output + secrets_output, initial_url, verbose)
+
+    tasks = []
+    for url in js_urls:
+        if url not in processed_urls:
+            tasks.append(recursive_process(url, session, processed_urls, verbose))
+
+    results = await asyncio.gather(*tasks)
+
+    for result_js_urls, result_non_js_urls, result_secrets in results:
+        js_urls.update(result_js_urls)
+        non_js_urls.update(result_non_js_urls)
+        secrets.extend(result_secrets)
+
+    return js_urls, non_js_urls, secrets
 
 def severity_to_int(severity):
     severity_map = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1, 'info': 0}
     return severity_map.get(severity.lower(), -1)
 
-if __name__ == "__main__":
+async def main():
     parser = argparse.ArgumentParser(description="JSluice URL and Secrets Processor")
     parser.add_argument('-m', '--mode', choices=['endpoints', 'secrets', 'both'], default='both',
                         help="Specify what to hunt for: endpoints, secrets, or both (default: both)")
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help="Enable verbose output")
     args = parser.parse_args()
 
     all_urls = set()
     all_secrets = []
+    processed_urls = set()
 
-    for initial_url in sys.stdin:
-        initial_url = initial_url.strip()
-        if initial_url:
-            result_urls, result_secrets = recursive_process(initial_url, args.mode)
-            all_urls.update(result_urls)
-            all_secrets.extend(result_secrets)
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for initial_url in sys.stdin:
+            initial_url = initial_url.strip()
+            if initial_url:
+                tasks.append(recursive_process(initial_url, session, processed_urls, args.verbose))
+
+        results = await asyncio.gather(*tasks)
+
+        for js_urls, non_js_urls, secrets in results:
+            all_urls.update(non_js_urls)
+            all_secrets.extend(secrets)
 
     if args.mode in ['endpoints', 'both']:
         for url in sorted(all_urls):
             print(url)
 
     if args.mode in ['secrets', 'both']:
-        # Sort secrets by severity (highest to lowest) and remove duplicates
         sorted_secrets = sorted(all_secrets, key=lambda x: (-severity_to_int(x['severity']), json.dumps(x)))
         unique_secrets = list(OrderedDict((json.dumps(secret), secret) for secret in sorted_secrets).values())
 
         for secret in unique_secrets:
             print(json.dumps(secret))
+
+if __name__ == "__main__":
+    asyncio.run(main())
