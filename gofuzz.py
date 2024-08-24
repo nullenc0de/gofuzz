@@ -204,16 +204,26 @@ def check_digitalocean(content, current_url):
 
 def check_tugboat(content, current_url):
     secrets = []
-    tugboat_regex = r'access_token:\s*([^\s]+)'
-    tugboat_matches = re.finditer(tugboat_regex, content)
-    for match in tugboat_matches:
-        secrets.append({
-            'kind': 'TugboatConfig',
-            'data': {'value': match.group(1), 'matched_string': match.group()},
-            'filename': current_url,
-            'severity': 'critical',
-            'context': None
-        })
+    
+    # Check if all required words are present
+    required_words = ["authentication", "access_token", "ssh_user"]
+    if all(word in content for word in required_words):
+        # Use the specific regex pattern from the YAML
+        tugboat_regex = r'access_token:\s*(.*)'
+        tugboat_matches = re.findall(tugboat_regex, content)
+        
+        for match in tugboat_matches:
+            secrets.append({
+                'kind': 'TugboatConfig',
+                'data': {
+                    'value': match,
+                    'matched_string': f'access_token: {match}'
+                },
+                'filename': current_url,
+                'severity': 'critical',
+                'context': None
+            })
+    
     return secrets
 
 async def recursive_process(initial_url, session, processed_urls, verbose):
