@@ -46,7 +46,8 @@ async def run_jsluice(url, mode, session, verbose):
                 print(f"Error processing {url}: {stderr.decode()}", file=sys.stderr)
             return stdout.decode().splitlines(), content
     except Exception as e:
-        print(f"Error in run_jsluice for {url}: {str(e)}", file=sys.stderr)
+        if verbose:
+            print(f"Error in run_jsluice for {url}: {str(e)}", file=sys.stderr)
         return [], ""
 
 async def process_jsluice_output(jsluice_output, current_url, content, verbose):
