@@ -8,6 +8,7 @@ import aiohttp
 import tempfile
 import os
 import subprocess
+import re
 
 def normalize_url(url, base_url):
     if url.startswith('//'):
@@ -67,7 +68,6 @@ def process_nuclei_output(nuclei_output, original_url):
     for line in nuclei_output:
         try:
             nuclei_data = json.loads(line)
-            # Skip lines that don't contain actual results
             if 'info' not in nuclei_data or 'extracted-results' not in nuclei_data:
                 continue
             
@@ -93,6 +93,7 @@ async def process_jsluice_output(jsluice_output, current_url, content, verbose, 
     js_urls = set()
     non_js_urls = set()
     secrets = []
+    api_endpoints = set()
 
     if verbose:
         print(f"Processing output for {current_url}")
@@ -117,6 +118,10 @@ async def process_jsluice_output(jsluice_output, current_url, content, verbose, 
                         js_urls.add(new_url)
                     else:
                         non_js_urls.add(new_url)
+                    
+                    # Check for API endpoints
+                    if re.search(r'/api/|/v\d+/', parsed_url.path):
+                        api_endpoints.add(new_url)
             elif 'kind' in data:
                 data['original_file'] = current_url
                 secrets.append(data)
@@ -138,18 +143,19 @@ async def process_jsluice_output(jsluice_output, current_url, content, verbose, 
         print(f"Found {len(js_urls)} JavaScript URLs")
         print(f"Found {len(non_js_urls)} non-JavaScript URLs")
         print(f"Found {len(secrets)} secrets")
+        print(f"Found {len(api_endpoints)} potential API endpoints")
 
-    return js_urls, non_js_urls, secrets
+    return js_urls, non_js_urls, secrets, api_endpoints
 
 async def recursive_process(initial_url, session, processed_urls, verbose, use_nuclei):
     if initial_url in processed_urls:
-        return set(), set(), []
+        return set(), set(), [], set()
     processed_urls.add(initial_url)
 
     urls_output, content = await run_jsluice(initial_url, 'urls', session, verbose)
     secrets_output, _ = await run_jsluice(initial_url, 'secrets', session, verbose)
 
-    js_urls, non_js_urls, secrets = await process_jsluice_output(urls_output + secrets_output, initial_url, content, verbose, use_nuclei)
+    js_urls, non_js_urls, secrets, api_endpoints = await process_jsluice_output(urls_output + secrets_output, initial_url, content, verbose, use_nuclei)
 
     tasks = []
     for url in js_urls:
@@ -158,12 +164,13 @@ async def recursive_process(initial_url, session, processed_urls, verbose, use_n
 
     results = await asyncio.gather(*tasks)
 
-    for result_js_urls, result_non_js_urls, result_secrets in results:
+    for result_js_urls, result_non_js_urls, result_secrets, result_api_endpoints in results:
         js_urls.update(result_js_urls)
         non_js_urls.update(result_non_js_urls)
         secrets.extend(result_secrets)
+        api_endpoints.update(result_api_endpoints)
 
-    return js_urls, non_js_urls, secrets
+    return js_urls, non_js_urls, secrets, api_endpoints
 
 def severity_to_int(severity):
     severity_map = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1, 'info': 0}
@@ -171,16 +178,19 @@ def severity_to_int(severity):
 
 async def main():
     parser = argparse.ArgumentParser(description="JSluice URL and Secrets Processor")
-    parser.add_argument('-m', '--mode', choices=['endpoints', 'secrets', 'both'], default='both',
-                        help="Specify what to hunt for: endpoints, secrets, or both (default: both)")
+    parser.add_argument('-m', '--mode', choices=['endpoints', 'secrets', 'both', 'api'], default='both',
+                        help="Specify what to hunt for: endpoints, secrets, both, or api (default: both)")
     parser.add_argument('-v', '--verbose', action='store_true',
                         help="Enable verbose output")
     parser.add_argument('-n', '--nuclei', action='store_true',
                         help="Use Nuclei for additional secret detection")
+    parser.add_argument('-s', '--silent', action='store_true',
+                        help="Enable silent mode (no headers, mixed output)")
     args = parser.parse_args()
 
     all_urls = set()
     all_secrets = []
+    all_api_endpoints = set()
     processed_urls = set()
 
     async with aiohttp.ClientSession() as session:
@@ -192,25 +202,39 @@ async def main():
 
         results = await asyncio.gather(*tasks)
 
-        for js_urls, non_js_urls, secrets in results:
+        for js_urls, non_js_urls, secrets, api_endpoints in results:
             all_urls.update(non_js_urls)
             all_secrets.extend(secrets)
+            all_api_endpoints.update(api_endpoints)
 
-    if args.mode in ['endpoints', 'both']:
+    if args.mode in ['endpoints', 'both', 'api']:
         for url in sorted(all_urls):
-            print(url)
+            if args.silent:
+                print(url)
+            else:
+                print(f"URL: {url}")
+        
+        for endpoint in sorted(all_api_endpoints):
+            if args.silent:
+                print(endpoint)
+            else:
+                print(f"API Endpoint: {endpoint}")
 
     if args.mode in ['secrets', 'both']:
         sorted_secrets = sorted(all_secrets, key=lambda x: (-severity_to_int(x['severity']), json.dumps(x)))
         unique_secrets = list(OrderedDict((json.dumps(secret), secret) for secret in sorted_secrets).values())
 
         for secret in unique_secrets:
-            print(json.dumps(secret))
+            if args.silent:
+                print(json.dumps(secret))
+            else:
+                print(f"Secret: {json.dumps(secret)}")
 
     if args.verbose:
-        print(f"Total URLs processed: {len(processed_urls)}")
+        print(f"\nTotal URLs processed: {len(processed_urls)}")
         print(f"Total unique non-JS URLs found: {len(all_urls)}")
         print(f"Total secrets found: {len(all_secrets)}")
+        print(f"Total potential API endpoints found: {len(all_api_endpoints)}")
 
 if __name__ == "__main__":
     asyncio.run(main())
