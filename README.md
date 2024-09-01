@@ -1,6 +1,6 @@
-# JSluice and Nuclei Integration Script
+# gofuzz.py
 
-This script is a powerful tool that recursively processes JavaScript files to extract URLs and secrets using both the JSluice command-line utility and Nuclei. It starts with an initial URL, processes all JavaScript files it encounters, and outputs a comprehensive list of unique URLs and any secrets found, sorted by severity.
+gofuzz.py is a powerful tool that recursively processes JavaScript files to extract URLs and secrets using both the JSluice command-line utility and Nuclei. It starts with an initial URL, processes all JavaScript files it encounters, and outputs a comprehensive list of unique URLs and any secrets found, sorted by severity.
 
 ## Features
 
@@ -33,7 +33,12 @@ This script is a powerful tool that recursively processes JavaScript files to ex
    pip install aiohttp
    ```
 
-5. Download the script (e.g., `jsluice_nuclei_processor.py`).
+5. Download the `gofuzz.py` script.
+6. Make the script executable:
+
+   ```
+   chmod +x gofuzz.py
+   ```
 
 ## Usage
 
@@ -42,13 +47,13 @@ You can use the script in two ways:
 1. Process a single URL:
 
    ```
-   echo "https://example.com/script.js" | python jsluice_nuclei_processor.py [options]
+   echo "https://example.com/script.js" | ./gofuzz.py [options]
    ```
 
 2. Process multiple URLs from a file:
 
    ```
-   cat js_urls.txt | python jsluice_nuclei_processor.py [options]
+   cat js_urls.txt | ./gofuzz.py [options]
    ```
 
 ### Options
@@ -61,17 +66,17 @@ Examples:
 
 - To hunt for endpoints only:
   ```
-  echo "https://example.com/script.js" | python jsluice_nuclei_processor.py -m endpoints
+  echo "https://example.com/script.js" | ./gofuzz.py -m endpoints
   ```
 
 - To hunt for secrets only, using both JSluice and Nuclei:
   ```
-  echo "https://example.com/script.js" | python jsluice_nuclei_processor.py -m secrets -n
+  echo "https://example.com/script.js" | ./gofuzz.py -m secrets -n
   ```
 
 - To hunt for both endpoints and secrets, with verbose output:
   ```
-  echo "https://example.com/script.js" | python jsluice_nuclei_processor.py -m both -v -n
+  echo "https://example.com/script.js" | ./gofuzz.py -m both -v -n
   ```
 
 ## Output
