@@ -378,7 +378,7 @@ class GoFuzz:
         if any(pattern in path for pattern in js_patterns):
             return True
             
-        # Very long random-looking paths (like the DraftKings example)
+        # Very long random-looking paths
         if len(path) > 20 and '/' in path:
             # Check for base64-like or encoded patterns
             path_parts = [p for p in path.split('/') if p]
